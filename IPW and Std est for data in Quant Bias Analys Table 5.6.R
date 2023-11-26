@@ -11,7 +11,10 @@ simu <- rbind(simu,data.frame(D = rep(0,871),E = rep(0,871),C = rep(0,871))) #0-
 #crude RR
 RR_crude <- with(simu,
                  (sum(D == 1 & E == 1)/sum(E == 1))/(sum(D == 1 & E == 0)/sum(E == 0)))
-
+RR_C0_crude <- with(simu[simu$C==0,],
+                    (sum(D == 1 & E == 1)/sum(E == 1))/(sum(D == 1 & E == 0)/sum(E == 0)))
+RR_C1_crude <-with(simu[simu$C==1,],
+                    (sum(D == 1 & E == 1)/sum(E == 1))/(sum(D == 1 & E == 0)/sum(E == 0)))
 
 #IP weightening
 #calc Pr(A)
@@ -59,3 +62,47 @@ RR_adj1 <- sum(simu_std$pred1[simu_std$status==1])/sum(simu_std$pred1[simu_std$s
 RR_adj2 <- sum(simu_std$pred2[simu_std$status==1])/sum(simu_std$pred2[simu_std$status==0])
 RR_adj3 <- sum(simu_std$pred3[simu_std$status==1])/sum(simu_std$pred3[simu_std$status==0])
 RR_adj_std <- c(RR_adj1,RR_adj2,RR_adj3)
+
+#estimate crude and standardized (conditioning on distribution of C within E=1)RR using regression
+
+crudemodel <- glm(D~E,family = binomial(link = "log"),data = simu)
+crudemodelps <- glm(D~E,family = poisson(link = "log"),data = simu)
+crudemodelnb <- MASS::glm.nb(D~E,data = simu)
+
+RR_crude_reg <- c(
+  exp(coefficients(crudemodel)[2]),
+  exp(coefficients(crudemodelps)[2]),
+  exp(coefficients(crudemodelnb)[2])
+)
+RR_crude_reg
+
+#conditioning on distribution of C within E=1. Standardization used.
+#Construct two pseudo datasets with approx. corrected Pr(C|E=1)
+Pr_C_E1 <- nrow(simu[simu$E == 1 & simu$C == 1,])/nrow(simu[simu$E==1,])
+simu_pseudo_untreated <- data.frame(
+  D = rep(NA,8100),
+  E = rep(0,8100),
+  C = c(rep(1,round(8100*Pr_C_E1)),rep(0,(8100-round(8100*Pr_C_E1))))
+)
+simu_pseudo_treated <- data.frame(
+  D = rep(NA,8100),
+  E = rep(1,8100),
+  C = c(rep(1,round(8100*Pr_C_E1)),rep(0,(8100-round(8100*Pr_C_E1))))
+)
+#Using previous regression model to calculate "conditional standardized" RR
+simu_pseudo_treated$pred1 <- predict(stdmodel,newdata = simu_pseudo_treated,type = "response")
+simu_pseudo_treated$pred2 <- predict(stdmodelps,newdata = simu_pseudo_treated,type = "response")
+simu_pseudo_treated$pred3 <- predict(stdmodelnb,newdata = simu_pseudo_treated,type = "response")
+
+simu_pseudo_untreated$pred1 <- predict(stdmodel,newdata = simu_pseudo_untreated,type = "response")
+simu_pseudo_untreated$pred2 <- predict(stdmodelps,newdata = simu_pseudo_untreated,type = "response")
+simu_pseudo_untreated$pred3 <- predict(stdmodelnb,newdata = simu_pseudo_untreated,type = "response")
+
+RR_condstd <- c(
+  sum(simu_pseudo_treated$pred1)/sum(simu_pseudo_untreated$pred1),
+  sum(simu_pseudo_treated$pred2)/sum(simu_pseudo_untreated$pred2),
+  sum(simu_pseudo_treated$pred3)/sum(simu_pseudo_untreated$pred3)
+)
+RR_condstd
+## Here RR_condstd (standardized conditioning on the distribution of C|E=1) precisely equals to 
+## What reported in the book.
