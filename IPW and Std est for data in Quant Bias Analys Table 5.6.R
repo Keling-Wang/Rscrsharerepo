@@ -16,7 +16,7 @@ RR_C0_crude <- with(simu[simu$C==0,],
 RR_C1_crude <-with(simu[simu$C==1,],
                     (sum(D == 1 & E == 1)/sum(E == 1))/(sum(D == 1 & E == 0)/sum(E == 0)))
 
-#IP weightening
+#IP weighting
 #calc Pr(A)
 swmodel <- glm(E~C,family = binomial(),data=simu)
 E.w <- predict(swmodel,type = "response")
@@ -41,7 +41,7 @@ RR_adj_ipw <- c(exp(coefficients(ipmodel)[2]),
             exp(coefficients(ipmodelps)[2]),
             exp(coefficients(ipmodelnb)[2]))
 
-##standarization
+##standardization
 simu_std <- rbind(simu,simu,simu)
 simu_std$E[8101:(8100*2)] <- 0
 simu_std$E[(8100*2+1):(8100*3)] <- 1
@@ -63,7 +63,7 @@ RR_adj2 <- sum(simu_std$pred2[simu_std$status==1])/sum(simu_std$pred2[simu_std$s
 RR_adj3 <- sum(simu_std$pred3[simu_std$status==1])/sum(simu_std$pred3[simu_std$status==0])
 RR_adj_std <- c(RR_adj1,RR_adj2,RR_adj3)
 
-#estimate crude and standardized (conditioning on distribution of C within E=1)RR using regression
+#estimate crude RR using regression
 
 crudemodel <- glm(D~E,family = binomial(link = "log"),data = simu)
 crudemodelps <- glm(D~E,family = poisson(link = "log"),data = simu)
@@ -76,19 +76,21 @@ RR_crude_reg <- c(
 )
 RR_crude_reg
 
-#conditioning on distribution of C within E=1. Standardization used.
+#Estimate "Fox"-adjusted RR. Conditioning on distribution of C within E=1. pseudo-Standardization used.
 #Construct two pseudo datasets with approx. corrected Pr(C|E=1)
 Pr_C_E1 <- nrow(simu[simu$E == 1 & simu$C == 1,])/nrow(simu[simu$E==1,])
-simu_pseudo_untreated <- data.frame(
-  D = rep(NA,8100),
-  E = rep(0,8100),
-  C = c(rep(1,round(8100*Pr_C_E1)),rep(0,(8100-round(8100*Pr_C_E1))))
-)
+
 simu_pseudo_treated <- data.frame(
   D = rep(NA,8100),
   E = rep(1,8100),
   C = c(rep(1,round(8100*Pr_C_E1)),rep(0,(8100-round(8100*Pr_C_E1))))
 )
+simu_pseudo_untreated <- data.frame(
+  D = rep(NA,8100),
+  E = rep(0,8100),
+  C = c(rep(1,round(8100*Pr_C_E1)),rep(0,(8100-round(8100*Pr_C_E1))))
+)
+
 #Using previous regression model to calculate "conditional standardized" RR
 simu_pseudo_treated$pred1 <- predict(stdmodel,newdata = simu_pseudo_treated,type = "response")
 simu_pseudo_treated$pred2 <- predict(stdmodelps,newdata = simu_pseudo_treated,type = "response")
